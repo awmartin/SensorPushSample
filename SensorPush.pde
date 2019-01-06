@@ -71,12 +71,16 @@ class SensorPush {
   }
   
   JSONObject querySamples() {
+    return this.querySamples(MAX_READINGS);
+  }
+  
+  JSONObject querySamples(int numReadings) {
     this.auth();
     
     PostRequest post = new PostRequest("https://api.sensorpush.com/api/v1/samples");
     post.addHeader("Accept", "application/json");
     post.addHeader("Authorization", this.accessToken);
-    post.addBody("{\"limit\": " + MAX_READINGS + "}");
+    post.addBody("{\"limit\": " + numReadings + "}");
 
     post.send();
     
@@ -125,13 +129,24 @@ class SensorPush {
   }
   
   SensorReading[] readingsFromSensor(String sensorId) {
+    return this.readingsFromSensor(sensorId, MAX_READINGS);
+  }
+  
+  SensorReading[] readingsFromSensor(String sensorId, int numReadings) {
     if (sensorId == null) {
       println("Called readingsFromSensor with a null sensor ID.");
       return null;
     }
     
-    JSONObject samples = this.querySamples();
+    JSONObject samples = this.querySamples(numReadings);
+    if (samples == null) {
+      return new SensorReading[0];
+    }
+
     JSONObject sensors = samples.getJSONObject("sensors");
+    if (sensors == null) {
+      return new SensorReading[0];
+    }
     
     JSONArray sensorSamples = sensors.getJSONArray(sensorId);
     if (sensorSamples == null) {
@@ -139,17 +154,24 @@ class SensorPush {
     }
     
     int numSensorReadings = sensorSamples.size();
+    if (numSensorReadings == 0) {
+      return new SensorReading[0];
+    }
+    
     SensorReading[] readings = new SensorReading[numSensorReadings];
-    for (int i = 0; i < sensorSamples.size(); i ++) {
-      readings[i] = new SensorReading(sensorSamples.getJSONObject(i));
+    // The SensorPush API returns sensor results in reverse order, with the latest
+    // result first. This makes it awkward to update sensor results incrementally
+    // over time, since arrays are more easily updated by appending. So let's reverse
+    // the results. To get the raw API results, use querySamples();
+    for (int i = 0; i < sensorSamples.size(); i++) {
+      JSONObject sample = sensorSamples.getJSONObject(sensorSamples.size() - 1 - i);
+      readings[i] = new SensorReading(sample);
     }
     
     return readings;
   }
   
   void auth() {
-    println("Authorizing the request.");
-
     if (this.authorization == null || this.accessToken == null) {
       this.loadAuthFile();
     }
@@ -243,10 +265,18 @@ class SensorPush {
       }
       
       // Some error checking for known error cases.
+      if (this.authorization == null || this.accessToken == null) {
+        return;
+      }
+
       if (this.authorization.equals("null") || this.accessToken.equals("null")) {
         this.authorization = null;
         this.accessToken = null;
       }
+    } else {
+      // The auth file didn't parse for some reason.
+      this.authorization = null;
+      this.accessToken = null;
     }
   }
   
