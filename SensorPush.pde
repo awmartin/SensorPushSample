@@ -10,12 +10,22 @@ class SensorPush {
   
   String authorization;
   String accessToken;
+  
+  // You can provide a credentials JSON file that has two fields, email and password.
+  // {
+  //   "email": "myemail@example.com",
+  //   "password": "pa$$w0rd"
+  // }
+  public SensorPush(String credentialsFile) {
+    JSONObject creds = loadJSONObject(credentialsFile);
+    this.email = creds.getString("email");
+    this.password = creds.getString("password");
+  }
 
   public SensorPush(String email, String password) {
     this.email = email;
     this.password = password;
   }
-  
   
   JSONObject listGateways() {
     this.auth();
@@ -49,7 +59,14 @@ class SensorPush {
       println(post.getContent());
       return new JSONObject();
     } else {
-      return result;
+      String statusCode = result.getString("statusCode");
+      if (statusCode != null) {
+        println("An error probably occurred...");
+        println(result);
+        return new JSONObject();
+      } else {
+        return result;
+      }
     }
   }
   
@@ -190,7 +207,7 @@ class SensorPush {
     } else {
       this.accessToken = result.getString("accesstoken");
       if (this.accessToken == null) {
-        println("Error while retrieving access token:");
+        println("An error occurred while retrieving an access token:");
         println(result);
       } else {
         println("Access token retrieved:", this.accessToken);
@@ -223,6 +240,12 @@ class SensorPush {
         println("Found a fresh auth file and tokens.");
         this.authorization = json.getString("authorization");
         this.accessToken = json.getString("accessToken");
+      }
+      
+      // Some error checking for known error cases.
+      if (this.authorization.equals("null") || this.accessToken.equals("null")) {
+        this.authorization = null;
+        this.accessToken = null;
       }
     }
   }
